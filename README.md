@@ -154,12 +154,15 @@ On a CCD camera, the recorded readings normally are well below 65535(16 bit). Th
    12B int8'34 00 22 01'
    24B 3x int4  (=1,MaxPossiblePixelValue,ffffffff)  
    2B ='00 00'
+```
+## [Image data]
+
+```
+   1x int 1               datatype =6 means 4-byte int signed
+   4B '08 22 02 02'       unknown, likely datablock node tag
+   12B 3xint4             datasize+8bytes, width, hight
    
-   1x int 1 =6 ####datatype =6 meaning 4-byte int signed
-   4B '08220202'unknown
-   12B 3xint4 datasize+8bytes width hight
-   
-   <dataarray>
+   <dataarray> of datasize bytes
 ```
 
 ## [calibration offsets and deltas]
