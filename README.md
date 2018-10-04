@@ -186,11 +186,12 @@ Offsets are the center of the detector. These numbers should be delta*(-width/2)
 
 ## [the XML]
 
-The XML block contains some interesting microscope settings. This can be easily found by looking for the <ObjectInfo></ObjectInfo> pairs. Two bytes, '0D 0A', follow the </ObjectInfo> tag.
-
 The XML block is found immediately after the filename string. The node starts with '32 00 42 04', then '02 00'. The XML is saved as a '60 00' -string.
 
-A section int the XML is tagged 'TrueImageHeaderInfo'. When expanded, looks like this(comments are my guesses):
+The XML block contains some interesting microscope settings. This can also be easily found by looking for the <ObjectInfo></ObjectInfo> pairs. 
+
+
+A section in the XML is tagged 'TrueImageHeaderInfo'. When expanded, looks like this (nothing really useful):
 ```
   Data:
   - Index: '5'
@@ -329,5 +330,5 @@ A section int the XML is tagged 'TrueImageHeaderInfo'. When expanded, looks like
   '00 00'
 2x '70 00'
   '00 00'
-'03 4D 00 08 00 00 00 00'www
+'03 4D 00 08 00 00 00 00'
 ```
