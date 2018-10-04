@@ -14,13 +14,13 @@ TIA .EMI file format is not disclosed by FEI. However it contains a exact same c
 
 In front of the datablock, 1 byte carries the datatype '06', 12 bytes code 3 x int4 numbers:
 ```
-   *signed* int4 [datablocksize+8]=x*y*4+8 ( *signed because -2 has been observed in an image with max=2500*)
-   int4 [x] (pixels width, probably signed too)
+   int4 [datablocksize+8]=x*y*4+8
+   int4 [x] (pixels width)
    int4 [y] (pixels height)
 ```
 
 
-On a CCD camera, the recorded readings normally are well below 65535(16 bit). The saturation value can also be found in the EMI file as a int4 number(see below). As the data array is saved as *signed* int4 (*see above*), for almost all numbers the two upper bytes are always 00 00. Only in rare cases, when negative nubmers are recorded the upper two bytes are non-zero (for example, -2 would be 'fe ff ff ff'). This should also help validating the datablock.
+On a CCD camera, the recorded readings normally are well below 65535(16 bit). The saturation value can also be found in the EMI file as a int4 number(see below). As the data array is saved as *signed* int4 (*because -2 has been encountered in image with max=2500*), for almost all numbers the two upper bytes are always 00 00. Only in rare cases, when negative nubmers are recorded the upper two bytes are non-zero (for example, -2 would be 'fe ff ff ff'). Converting to signed int16 should be safe but if converting to 16bit grayscale images such as TIFF16, remember to change the negative values to 0 (should have no real effect to the image because these values appear at most once per image).
 
 
 
