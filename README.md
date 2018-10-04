@@ -177,7 +177,7 @@ Example:
    04000437:	<31 00 50 01 00 00 00 00>	i4 [0]
    0400043f:	<00 00>	====
 ```
-The Calibration deltas are the Apix in meter. 1e-10 meter= 1 Angstrom.
+The Calibration deltas are the dimensions of single pixels in meter. 1e-10 meter= 1 Angstrom. 
 Offsets are the center of the detector. These numbers should be delta*(-width/2) and delta*(-height/2). On a 4096x4096 detector such as Ceta, this will be delta*2048.
 
 
