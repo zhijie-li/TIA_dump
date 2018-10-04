@@ -164,7 +164,7 @@ On a CCD camera, the recorded readings normally are well below 65535(16 bit). Th
 
 ## [calibration offsets and deltas]
 
-Following the dataarray (x * y int4 numbers), there are 4 unknow bytes: '02 41 00 03', this is likely the node (C struct header) for the calibration data.
+Following the dataarray (x * y int4 numbers), there are 4 unknow bytes: '02 41 00 03', this is likely the node tag for the calibration data.
 
 Example:
 ```
