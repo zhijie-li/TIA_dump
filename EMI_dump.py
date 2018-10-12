@@ -134,6 +134,7 @@ def read_EMI_header(file_chunk):
   
   data_ndarray=np.ndarray(1)
   xmltext=''
+  xml_dict={}
   while(offset<total-2):
       print("{:08x}:".format(offset),end='\t')
       typestr=type_tags(file_chunk[offset:offset+2])
@@ -196,8 +197,10 @@ def read_EMI_header(file_chunk):
         val,incr=read_str(file_chunk[offset:offset+20000])
         print_hex(file_chunk[offset:offset+incr])
         print("{} [{}]".format(typestr,val))
-        if(val.find('<ObjectInfo>')):
+        if(len(val)>50 and val.find('ObjectInfo>')>0):
           xmltext=val
+          #print(">>>>>>>>\n{}<<<<<<<<<<<".format(xmltext))
+          
         offset+=incr
       if(typestr=='ary_i1' or typestr=='ary_i4' or typestr=='ary_i8' or typestr=='ary_f8'):
         print_hex(file_chunk[offset:offset+incr])
@@ -208,7 +211,7 @@ def read_EMI_header(file_chunk):
         exit()
       prestr=typestr
       preoff=offset  
-
+      
   return xmltext,data_ndarray
 
 
@@ -298,6 +301,7 @@ def print_xml_data(xml_dict):
     return (apix,magnification,defocus,kV)
     
 def parse_xml(xmltext):
+    print(xmltext)
     dic=xmltodict.parse(xmltext)
     dic1=json.dumps(dic)
     dic2=json.loads(dic1)
@@ -441,7 +445,9 @@ def read5_data(header_data,offset):
   print_yaml( data_header)
   return data_header
   
-def save_tiff16(buff,desc_data,tif_name,amax,ysize,xsize):
+def save_tiff8(buff,desc_data,tif_name,amax,ysize,xsize):
+  if(amax==0):
+    amax=1
   data = np.asarray(buff,dtype=np.float32) 
   d0=data*255/amax
   d1=d0.reshape(ysize,xsize)
@@ -450,6 +456,29 @@ def save_tiff16(buff,desc_data,tif_name,amax,ysize,xsize):
   tiff = TIFF.open(tif_name, mode='w')
   tiff.write_image(d2)
   tiff.close()
+
+def save_tiff16(buff,desc_data,tif_name,amax,ysize,xsize):
+  data = np.asarray(buff,dtype=np.float32) 
+  if(amax==0):
+    amax=1
+  d0=data*65535/amax
+  d1=d0.reshape(ysize,xsize)
+  d2=d1.astype(np.uint16)
+  #print("{} {} {}".format(d2[0][0], d2.shape,d2.dtype))
+  tiff = TIFF.open(tif_name, mode='w')
+  tiff.write_image(d2)
+  tiff.close()
+
+def save_tiff16_no_rescaling(buff,desc_data,tif_name,amax,ysize,xsize):
+  data = np.asarray(buff,dtype=np.float32) 
+#  d0=data*65535/amax
+  d1=data.reshape(ysize,xsize)
+  d2=d1.astype(np.uint16)
+  #print("{} {} {}".format(d2[0][0], d2.shape,d2.dtype))
+  tiff = TIFF.open(tif_name, mode='w')
+  tiff.write_image(d2)
+  tiff.close()
+
 def get_datatype(typenumber):
   typechart={
         1  : '1 - Unsigned 1-byte integer' ,
@@ -493,68 +522,49 @@ def get_datatype(typenumber):
 def process_emi_file(filename):
       f=open(filename,'rb')
       file_size=os.path.getsize(filename)
-      #print("File size: {} bytes".format(file_size))
+      print("File size: {} bytes".format(file_size))
+      base=os.path.splitext(filename)[0]
+      parts=re.search('^(.+)(_\d)$',base)
+      if(parts and parts.group(2)):
+        base=parts.group(1)
+        #print(parts.group(0),parts.group(1),parts.group(2),base)
+      emi_file= base +'.emi'
+      XML_file= base +'.xml'
+      YAML_file= base +'.yaml'
+
       try:
           f.seek(0)
           raw = f.read(file_size)
           if raw:
-            xml,data=read_EMI_header(raw)
+              xmltext,data=read_EMI_header(raw)
+              xml_dict=parse_xml(xmltext)
+              trueheaderinfo=parse_xml(xml_dict['ObjectInfo']['TrueImageHeaderInfo'])
+              print_safe_yaml(trueheaderinfo)
+              x=open(XML_file,'wb')
+              x.write(xmltext)
+              x.close()
+
+              save_safe_yaml(xml_dict,YAML_file)
+              amax=data.max()
+              amin=data.min()
+              amean=data.mean()
+
+              #xml_dict=read_TIA_EMI_XML(filename,raw[header_inf['DataOffset']+50:header_inf['DataOffset']+50+datasize],ysize,xsize)
+              apix,magnification,defocus,kV=print_xml_data(xml_dict)
+              
+
+              infstr='_{:3.2f}Ap_{:d}KX_{}um_{:d}kV_mean{:d}'.format(apix,int(magnification/1000),defocus,kV,int(amean))
+              tif_name=filename+infstr+'.tif'
+              tif8_name=filename+infstr+'.uint8.tif'
+              desc_data=xml_dict
+              ysize=int(xml_dict['ObjectInfo']['DetectorPixelHeight'])
+              xsize=int(xml_dict['ObjectInfo']['DetectorPixelWidth'])
+              save_tiff8(data,desc_data,tif8_name,amax,ysize,xsize)     
+              save_tiff16_no_rescaling(data,desc_data,tif_name,amax,ysize,xsize)     
+
       finally:
           f.close()  
 
-
-
-def process_ser_file(filename):
-      f=open(filename,'rb')
-      file_size=os.path.getsize(filename)
-      #print("File size: {} bytes".format(file_size))
-      try:
-          f.seek(0)
-          raw = f.read(file_size)
-          if raw:
-              
-              header_inf=read_TIA_SER_header(raw[:2048],file_size)
-              data_header=read5_data(raw[:2048],header_inf['DataOffset'])
-              ysize,xsize=(data_header['ArraySizeY'],data_header['ArraySizeX'])
-              
-              datatype,point_bytes,datafmt=get_datatype(data_header['DataType'])
-              datasize=ysize*xsize*point_bytes #bytes in data array
-
-              fmt='<'+str(ysize*xsize)+datafmt;
-
-              print ('datatype: [{}]\ndatasize: {} byte           format charctor: \'{}\''.format(datatype,point_bytes,datafmt))
-              print ('format string "{}"'.format(fmt))
-              print()
-              
-              data=struct.unpack(fmt, raw[header_inf['DataOffset']+50:header_inf['DataOffset']+50+datasize])
-              amax=max(data)
-              amin=min(data)
-              amean=sum(data) / float(len(data))
-              print ("min: {}\t max: {}".format(amin,amax))
-              if(amin<0 or amax >65535):
-                count1=0
-                count2=0
-                for i in data:
-                  if i>65535:
-                    count1+=1
-                  if i<0:
-                    count2+=1
-                print ("{} pixels are >65535, {} pixels are negative".format(count1,count2))
-              if(header_inf['TagTypeID']==0x4152): #just time, really not worth reading
-                mark,=tag_time,=struct.unpack('<h', raw[header_inf['Tag_offset']:header_inf['Tag_offset']+2])
-                tag_time,=struct.unpack('<i', raw[header_inf['Tag_offset']+4:header_inf['Tag_offset']+4+4])
-                print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(tag_time+6*3600))) #somthing wrong with MSB TIA time.
-                #print(time.time(),time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
-                #print ('\n{}\n'.format(mark))
-              xml_dict=read_TIA_EMI_XML(filename,raw[header_inf['DataOffset']+50:header_inf['DataOffset']+50+datasize],ysize,xsize)
-              apix,magnification,defocus,kV=print_xml_data(xml_dict)
-              desc_data=xml_dict
-              infstr='_{:3.2f}Ap_{:d}KX_{}um_{:d}kV_mean{:d}'.format(apix,int(magnification/1000),defocus,kV,int(amean))
-              tif_name=filename+infstr+'.tif'
-              
-              save_tiff16(data,desc_data,tif_name,amax,ysize,xsize)
-      finally:
-          f.close()
 
 
 ############################main##################

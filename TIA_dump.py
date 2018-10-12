@@ -4,16 +4,17 @@ from __future__ import print_function
 import struct
 import os
 import sys
+import numpy as np
+
 import yaml
 import json
-#import csv
-#import numpy as np
 import time
-import xmltodict
+  
 import re
+#tell user to install xmltodict
+
+#import csv
 #from tifffile import imsave
-import numpy as np
-from libtiff import TIFF
 #import anymarkup
 #import xml.etree.ElementTree as et
 #import untangle
@@ -22,9 +23,32 @@ from libtiff import TIFF
 #from skimage import io
 #zlib is used by the write PNG function
 
+def read_xmlfile(XML_file):
+  if(os.path.isfile(XML_file)):
+    x=open(XML_file,'rb')
+    xmltext=x.read(os.path.getsize(XML_file))
+    xml_dict=parse_xml(xmltext)
+    x.close()
+    return xml_dict,xmltext
+  else:
+    return {},''
+
+def read_yamlfile(YAML_file):
+  yaml_dict={}
+  yamltxt={}
+  with open(YAML_file, 'r') as stream:
+    yamltext=stream.read(os.path.getsize(XML_file))
+    try:
+        yaml_dict=yaml.load(stream)
+    except yaml.YAMLError as exc:
+        print(exc)
+  return yaml_dict,yamltxt
+  
 def save_safe_yaml(data,filename):
+    yamltext=yaml.safe_dump(data , default_flow_style=False)
     with open(filename, 'w') as outfile:
         yaml.safe_dump(data, outfile, default_flow_style=False)
+    return yamltext
 def save_yaml(data,filename):
     with open(filename, 'w') as outfile:
         yaml.dump(data, outfile, default_flow_style=False)
@@ -33,21 +57,21 @@ def print_hex(astr):
   print ("[{}]".format( hexs))
 
 def print_safe_yaml(data):
-  print (yaml.safe_dump(data , default_flow_style=False))
+  yamltext=yaml.safe_dump(data , default_flow_style=False)
+  print (yamltext)
+  return yamltext
 def print_yaml(data):
   print (yaml.dump(data , default_flow_style=False))
 
   
-def read_TIA_EMI_XML(filename,datablock,imagesizex,imagesizey):
-  base=os.path.splitext(filename)[0]
-  parts=re.search('^(.+)(_\d)$',base)
-  if(parts and parts.group(2)):
-    base=parts.group(1)
-    #print(parts.group(0),parts.group(1),parts.group(2),base)
+def read_TIA_EMI_XML(base,datablock,imagesizex,imagesizey):
+  base=base
   emi_file= base +'.emi'
   XML_file= base +'.xml'
   YAML_file= base +'.yaml'
   xml_dict={}
+  xmltext=''
+  yamltext=''
   try:
         f=open(emi_file,'rb')
         file_size=os.path.getsize(emi_file)
@@ -60,27 +84,38 @@ def read_TIA_EMI_XML(filename,datablock,imagesizex,imagesizey):
         mark=struct.pack('<ii',imagesizex,imagesizey)
         d1024= mark+ datablock[:256] #the data segment in emi file starts with x,y dimensions, datablock is same as in the SER. Here using first 256 byte for locating
         seg=raw.find(d1024)
-        print("In EMI file: datablock start at {}-{}".format(seg+8,seg+8+len(datablock)))
+        
+        
         if(seg>0):
-          #print('searching for XML')
+          print("In EMI file: datablock start at {}-{}".format(seg+8,seg+8+len(datablock)))
+
           searchseg=raw[seg+8+len(datablock):file_size]
-          #print (len(searchseg))
-          start=searchseg.find('<ObjectInfo>')
+          print (len(searchseg))
+          start=searchseg.find('<ObjectInfo>'.encode('utf-8'))
           end=searchseg.find('</ObjectInfo>')
           xmltext=searchseg[start:end+15] #also write 0D0A at end
           #print (xmltext)
           
           if(len(xmltext)>20): 
             print("XML data found, saving as {} and {}\n".format(XML_file,YAML_file))
-            x=open(XML_file,'wb')
-            x.write(xmltext)
-            x.close()
             xml_dict=parse_xml(xmltext)
-            save_safe_yaml(xml_dict,YAML_file)
-        
-  finally:
-    pass
-  return xml_dict
+            
+            if(os.path.isfile(XML_file)):
+              print ("XML file already exists. Skipping")
+            else:
+              x=open(XML_file,'wb')
+              x.write(xmltext)
+              x.close()
+            if(os.path.isfile(YAML_file)):
+              print ("YAML file already exists. Skipping")
+            else:
+              yamltext=save_safe_yaml(xml_dict,YAML_file)
+            
+        else:
+          print("datablock not found or different from the .ser file, abort processing the EMI file")
+  except IOError:
+    print ("EMI file is not found")
+  return xml_dict,xmltext,yamltext
   
 def print_xml_data(xml_dict):
   for k,v in (xml_dict['ObjectInfo']['AcquireInfo']).iteritems():
@@ -112,9 +147,16 @@ def print_xml_data(xml_dict):
     return (apix,magnification,defocus,kV)
     
 def parse_xml(xmltext):
-    dic=xmltodict.parse(xmltext)
-    dic1=json.dumps(dic)
-    dic2=json.loads(dic1)
+    dic2={}
+    try:
+      import xmltodict
+      dic=xmltodict.parse(xmltext)
+      dic1=json.dumps(dic)
+      dic2=json.loads(dic1)
+    except ImportError:
+      print ("\n!!! This program needs module <xmltodict> for interpreting XML data. You can install xmltodict by:\n pip install xmltodict\n")
+      pass
+
     #print_safe_yaml(dic2)
     return dic2
 
@@ -255,25 +297,6 @@ def read5_data(header_data,offset):
   print_yaml( data_header)
   return data_header
   
-def save_tiff8(buff,desc_data,tif_name,amax,ysize,xsize):
-  data = np.asarray(buff,dtype=np.float32) 
-  d0=data*255/amax
-  d1=d0.reshape(ysize,xsize)
-  d2=d1.astype(np.uint8)
-  #print("{} {} {}".format(d2[0][0], d2.shape,d2.dtype))
-  tiff = TIFF.open(tif_name, mode='w')
-  tiff.write_image(d2)
-  tiff.close()
-
-def save_tiff16(buff,desc_data,tif_name,amax,ysize,xsize):
-  data = np.asarray(buff,dtype=np.float32) 
-  d0=data*65535/amax
-  d1=d0.reshape(ysize,xsize)
-  d2=d1.astype(np.uint16)
-  #print("{} {} {}".format(d2[0][0], d2.shape,d2.dtype))
-  tiff = TIFF.open(tif_name, mode='w')
-  tiff.write_image(d2)
-  tiff.close()
 
 def get_datatype(typenumber):
   typechart={
@@ -312,9 +335,34 @@ def get_datatype(typenumber):
         9  : 'ff'      ,     #9 - 8-byte complex	
         10 : 'dd'           #10 - 16-byte complex
   }
-  return typechart[typenumber],sizechart[typenumber],fmtchart[typenumber]
-  
+  numpy_dtypechart={
+        1  : np.uint8        ,    #1 - Unsigned 1-byte integer	
+        2  : np.uint16       ,    #2 - Unsigned 2-byte integer	
+        3  : np.uint32       ,    #3 - Unsigned 4-byte integer	
+        4  : np.int8         ,    #4 - Signed 1-byte integer	
+        5  : np.int16        ,    #5 - Signed 2-byte integer	
+        6  : np.int32        ,    #6 - Signed 4-byte integer	
+        7  : np.float32      ,    #7 - 4-byte float	
+        8  : np.float64           #8 - 8-byte float	
+  }
+  return typechart[typenumber],sizechart[typenumber],fmtchart[typenumber],numpy_dtypechart[typenumber]
+
+def get_namebase(filename):
+    base=os.path.splitext(filename)[0]
+    parts=re.search('^(.+)(_\d+)$',base)
+    if(parts and parts.group(2)):
+      base=parts.group(1)
+    #print(parts.group(0),parts.group(1),parts.group(2),base)
+    return base
+    
 def process_ser_file(filename):
+
+      base =get_namebase(filename) #cut off the _1.ser _2.ser from filename
+
+      EMI_filename= base +'.emi'
+      XML_filename= base +'.xml'
+      YAML_filename= base +'.yaml'
+  
       f=open(filename,'rb')
       file_size=os.path.getsize(filename)
       #print("File size: {} bytes".format(file_size))
@@ -327,7 +375,7 @@ def process_ser_file(filename):
               data_header=read5_data(raw[:2048],header_inf['DataOffset'])
               ysize,xsize=(data_header['ArraySizeY'],data_header['ArraySizeX'])
               
-              datatype,point_bytes,datafmt=get_datatype(data_header['DataType'])
+              datatype,point_bytes,datafmt,numpy_dtype=get_datatype(data_header['DataType'])
               datasize=ysize*xsize*point_bytes #bytes in data array
 
               fmt='<'+str(ysize*xsize)+datafmt;
@@ -337,45 +385,96 @@ def process_ser_file(filename):
               print()
               
               #data=struct.unpack(fmt, raw[header_inf['DataOffset']+50:header_inf['DataOffset']+50+datasize])
-              data=np.fromstring(raw[header_inf['DataOffset']+50:header_inf['DataOffset']+50+datasize],dtype=np.int32)
+              data=np.fromstring(raw[header_inf['DataOffset']+50:header_inf['DataOffset']+50+datasize],dtype=numpy_dtype) #for now just assume int32 data(CCD)
+              
+              negativelist,=np.where(data<0)
+              
+              if( len(negativelist) > 0):
+                print("negative values found at:",negativelist,data[negativelist],"converted to 0")
+                data[negativelist]=0
+              
+              neg_data=data*(-1) #invert
+              
               amax=data.max()
               amin=data.min()
               amean=data.mean()
-              print ("min: {}\t max: {} \t mean:{}".format(amin,amax,amean))
-#              if(amin<0 or amax >65535):
-#                count1=0
-#                count2=0
-#                for i in data:
-#                  if i>65535:
-#                    count1+=1
-#                  if i<0:
-#                    count2+=1
-#                print ("{} pixels are >65535, {} pixels are negative".format(count1,count2))
+              arms=stdev=data.std()
+
+              print ("min:{}\t max: {} \t mean:{}\tstdev:{}\t".format(amin,amax,amean,stdev))
+              collect_time=''
               if(header_inf['TagTypeID']==0x4152): #just time, really not worth reading
                 mark,=tag_time,=struct.unpack('<h', raw[header_inf['Tag_offset']:header_inf['Tag_offset']+2])
                 tag_time,=struct.unpack('<i', raw[header_inf['Tag_offset']+4:header_inf['Tag_offset']+4+4])
+                collect_time=time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(tag_time+6*3600))
                 print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(tag_time+6*3600))) #somthing wrong with MSB TIA time.
-                #print(time.time(),time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
+                print(time.time(),time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
                 #print ('\n{}\n'.format(mark))
-              xml_dict=read_TIA_EMI_XML(filename,raw[header_inf['DataOffset']+50:header_inf['DataOffset']+50+datasize],ysize,xsize)
-              apix,magnification,defocus,kV=print_xml_data(xml_dict)
-              desc_data=xml_dict
-              infstr='_{:3.2f}Ap_{:d}KX_{}um_{:d}kV_mean{:d}'.format(apix,int(magnification/1000),defocus,kV,int(amean))
-              tif_name=filename+infstr+'.tif'
+                
+              xml_dict,xmltext,yamltext={},'',''
+              if(os.path.isfile(EMI_filename)):
+                xml_dict,xmltext,yamltext=read_TIA_EMI_XML(base,raw[header_inf['DataOffset']+50:header_inf['DataOffset']+50+datasize],ysize,xsize)
+              elif(os.path.isfile(XML_filename)):
+                xml_dict,xmltext=read_xmlfile(XML_filename)
+              elif(os.path.isfile(YAML_filename)):
+                xml_dict,xmltext=read_yamlfile(YAML_filename)
+              apix,magnification,defocus,kV=(1.0,1,0,0)
               
-              save_tiff8(data,desc_data,tif_name,amax,ysize,xsize)     
+              if(xml_dict):
+                apix,magnification,defocus,kV=print_xml_data(xml_dict)
+              apix_from_header=float(data_header['CalibrationDeltaX']*10000000000)
+              pixel_size=apix_from_header*magnification/10000 #um
+              desc_data=xmltext
+              collect_time=re.sub(
+                r' ',
+                r'_',
+                collect_time
+              )
+              
+              collect_time_compact=line = re.sub(
+                      r"[ :-]", 
+                      "",            
+                      collect_time       )
+              print (">>>>>>",collect_time,collect_time_compact)
+              infstr='_{:4.3f}Ap_{:d}KX_{}um_{:d}kV_mean{:d}_{}'.format(apix_from_header,int(magnification/1000),defocus,kV,int(amean),collect_time_compact)
+              tif_name=filename+infstr+'.tif'
+              tif8_name=filename+infstr+'.uint8.tif'
+              mrc_name=filename+infstr+'.mrc'
+
+
+
 #              hs=np.histogram(data,bins=amax-amin) 
 #              print(hs)                                     
 #              for i in range(amax-amin):
 #                  print ("{} {} {}".format(i,hs[0][i],hs[1][i]))
+              
+              save_tiff=True
+              save_mrc =True
+              if(save_tiff == True):
+                import EM_tiff
+                EM_tiff.save_tiff8(neg_data,desc_data,tif8_name,-amin,-amax,ysize,xsize)     
+                EM_tiff.save_tiff16_no_rescaling(data,desc_data,tif_name,amax,amin,ysize,xsize)     
+              if(save_mrc == True):
+                import mrc
+                d1=data.reshape(xsize,ysize,1)
+                to_type=''
+                if(amax<65536/2 and amin>=0):
+                  to_type=np.int16
+                else:
+                  to_type=np.float32
+                data_16int=d1.astype(to_type)
+                mrc.save_mrc(mrc_name,data_16int, desc=infstr,hdr_apix=apix_from_header)
+              #df = data.astype(np.float32) 
+              #d0=df*127/amax
+              #d1=d0.reshape(ysize,xsize,1)
+              #d2=d1.astype(np.int8)
+
       finally:
+        
           f.close()
 
 
 ############################main##################
 def main():
-
-    
     if len(sys.argv)>1 and sys.argv[1]:
       files=sys.argv[1:]
       
