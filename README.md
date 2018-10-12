@@ -6,7 +6,10 @@ http://www3.ntu.edu.sg/home/cbb/info/TIAformat/TIAseriesformat.pdf
 and 
 http://www3.ntu.edu.sg/home/cbb/info/TIAformat/index.html
 
+A mrc file is going to be generated containing the original data, in int16 format(as CCD never need >65536/2 levels). Two tif files are also generated, one containing the original data, one containing recaled uint8 data for viewing.
+The original data will be multiplied by -1 (phase revsersal, same as "e2proc2d.py --multi=-1") so that it can be directly used in cryosparc.
 
+If EMI file is found, the xml section will be extracted and saved as .xml file. A easier to read YAML will be generated too.
 
 # .EMI format:
 
