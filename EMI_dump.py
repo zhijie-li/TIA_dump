@@ -117,6 +117,8 @@ def type_tags(chunk):
     typestr='bool'
   if(chunk==chr(0x08)+chr(0x22)): ##datablock
     typestr='dta'
+  if(chunk==chr(0x14)+chr(0x22)): ##FFT block
+    typestr='dta'
   if(chunk==o+o):
     typestr='===='
   return typestr
@@ -133,32 +135,40 @@ def read_EMI_header(file_chunk):
   preoff=offset
   
   data_ndarray=np.ndarray(1)
-  xmltext=''
+  xml_list=[]
   xml_dict={}
   while(offset<total-2):
       print("{:08x}:".format(offset),end='\t')
       typestr=type_tags(file_chunk[offset:offset+2])
-
-      if(typestr=='dta'):
-        print_hex(file_chunk[offset-5:offset+16])
+      if(typestr=='dta'): #datablock 
+        offset-=5
         
-        dta_type=ord(file_chunk[offset-1:offset]) ###need a lot of tests here
-        dta_size,dta_x,dta_y=struct.unpack("<iii",file_chunk[offset+4:offset+16])
+        print_hex(file_chunk[offset:offset+21])
+        
+        dta_type=ord(file_chunk[offset+4]) ###need a lot of tests here '0x06' int32 '0x09' complex float32 (FFT)
+        
+        dta_size,dta_x,dta_y=struct.unpack("<iii",file_chunk[offset+9:offset+21])
 
         dta_size-=8 #8bytes used for x and y
-        dta_start=offset+16
+        dta_start=offset+21
+        print("datatype {} {} {} {}".format( dta_type,dta_size,dta_x,dta_y))
+        if(dta_type==6):
+          data_ndarray=np.fromstring(file_chunk[dta_start:dta_start+dta_size],dtype=np.int32)
 
-        data_ndarray=np.fromstring(file_chunk[dta_start:dta_start+dta_size],dtype=np.int32)
+          print("datablock found: X{} Y{} start{} {}bytes".format(dta_x,dta_y,dta_start,dta_size))
+          print_hex(file_chunk[dta_start:dta_start+16])
+          print('\n...')
+          print_hex(file_chunk[dta_start+dta_size-16:dta_start+dta_size])
+          print()
+        if(dta_type==9):
+          #data_ndarray=np.fromstring(file_chunk[dta_start:dta_start+dta_size],dtype=np.complex64) #noneed to read
 
-        print("datablock found: X{} Y{} start{} {}bytes".format(dta_x,dta_y,dta_start,dta_size))
-        print_hex(file_chunk[dta_start:dta_start+16])
-        
-        
-        
-        print('\n...')
-        print_hex(file_chunk[dta_start+dta_size-16:dta_start+dta_size])
-        print()
-        offset+=dta_size+16
+          print("Complex datablock found: X{} Y{} start{} {}bytes".format(dta_x,dta_y,dta_start,dta_size))
+          print_hex(file_chunk[dta_start:dta_start+16])
+          print('\n...')
+          print_hex(file_chunk[dta_start+dta_size-16:dta_start+dta_size])
+          print()
+        offset+=dta_size+21+4
 
       if(typestr=='unknown'):
         print_hex(file_chunk[offset:offset+4])
@@ -198,8 +208,8 @@ def read_EMI_header(file_chunk):
         print_hex(file_chunk[offset:offset+incr])
         print("{} [{}]".format(typestr,val))
         if(len(val)>50 and val.find('ObjectInfo>')>0):
-          xmltext=val
-          #print(">>>>>>>>\n{}<<<<<<<<<<<".format(xmltext))
+          xml_list.append(val)
+          #print(">>>>>>>>\n{}<<<<<<<<<<<".format(val))
           
         offset+=incr
       if(typestr=='ary_i1' or typestr=='ary_i4' or typestr=='ary_i8' or typestr=='ary_f8'):
@@ -212,7 +222,7 @@ def read_EMI_header(file_chunk):
       prestr=typestr
       preoff=offset  
       
-  return xmltext,data_ndarray
+  return xml_list,data_ndarray
 
 
 def process_xml(xmltext,XML_file,YAML_file):
@@ -536,7 +546,8 @@ def process_emi_file(filename):
           f.seek(0)
           raw = f.read(file_size)
           if raw:
-              xmltext,data=read_EMI_header(raw)
+              xmllist,data=read_EMI_header(raw)
+              xmltext=xmllist[0]
               xml_dict=parse_xml(xmltext)
               trueheaderinfo=parse_xml(xml_dict['ObjectInfo']['TrueImageHeaderInfo'])
               print_safe_yaml(trueheaderinfo)
