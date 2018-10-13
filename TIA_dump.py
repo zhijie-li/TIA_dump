@@ -462,7 +462,7 @@ def process_ser_file(filename):
                 else:
                   to_type=np.float32
                 data_16int=d1.astype(to_type)
-                mrc.save_mrc(mrc_name,data_16int, desc=infstr,hdr_apix=apix_from_header)
+                mrc.save_mrc(mrc_name,data_16int, desc=xmltext,hdr_apix=apix_from_header)
               #df = data.astype(np.float32) 
               #d0=df*127/amax
               #d1=d0.reshape(ysize,xsize,1)

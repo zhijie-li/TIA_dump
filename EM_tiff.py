@@ -15,11 +15,16 @@ def save_tiff8(buff,desc_data,tif_name,amax,amin,ysize,xsize):
     return
 
   data = np.asarray(buff,dtype=np.float32) 
-  d0=data*255/(amax-amin)
+  d0=data*255/(np.abs(amax-amin))
   d1=d0.reshape(ysize,xsize)
   d2=d1.astype(np.uint8)
   #print("{} {} {}".format(d2[0][0], d2.shape,d2.dtype))
+  
+  #tiff = libtiff.TIFFimage(d2,description=desc_data)
+  #tiff.write_file(tif_name,compression='lzw')
+  #del tiff
   tiff = TIFF.open(tif_name, mode='w')
+  tiff.SetField('ImageDescription', desc_data)
   tiff.write_image(d2,compression='lzw')
   tiff.close()
 
@@ -36,6 +41,7 @@ def save_tiff16(buff,desc_data,tif_name,amax,amin,ysize,xsize):
   d2=d1.astype(np.uint16)
   #print("{} {} {}".format(d2[0][0], d2.shape,d2.dtype))
   tiff = TIFF.open(tif_name, mode='w')
+  tiff.SetField('ImageDescription', desc_data)
   tiff.write_image(d2,compression='lzw')
   tiff.close()
 
@@ -49,6 +55,7 @@ def save_tiff16_no_rescaling(buff,desc_data,tif_name,amax,amin,ysize,xsize):
   data = np.asarray(buff,dtype=np.uint16) 
   d2=data.reshape(ysize,xsize)
   tiff = TIFF.open(tif_name, mode='w')
+  tiff.SetField('ImageDescription', desc_data)
   tiff.write_image(d2,compression='lzw')
   tiff.close()
 
