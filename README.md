@@ -164,7 +164,7 @@ The image blocks start with:
 ```
     2B '00 00'		   ending last segment
     4B '20 00 00 02'	   annoucing a int8
-    1x int 1               datatype =6 means 4-byte int signed
+    1B int8                datatype =6 means 4-byte int signed
     4B '08 22 02 02'       unknown, likely datablock node tag
     12B 3xint4             datasize+8bytes, width, hight
    
@@ -175,7 +175,7 @@ Similarly, the FFT image blocks use the same layout:
 ``` 
     2B '00 00'		   ending last segment
     4B '20 00 00 02'	   annoucing a int8
-    1x int 1               datatype =9 means 8-byte complex (float32x2)
+    1B int8                datatype =9 means 8-byte complex (float32x2)
     4B '14 22 02 02'       unknown, likely datablock node tag
     12B 3xint4             datasize+8bytes, width, hight
    
