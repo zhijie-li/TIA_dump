@@ -4,6 +4,8 @@ from __future__ import print_function
 import struct
 import os
 import sys
+
+import argparse
 import numpy as np
 
 import yaml
@@ -266,6 +268,7 @@ def read2_dimention_array(header_data,Dim_array_offset):
 
   
 def read5_data(header_data,offset):
+  #print(header_data[:256],offset)
   CalibrationOffsetX,  \
   CalibrationDeltaX,   \
   CalibrationElementX, \
@@ -355,7 +358,7 @@ def get_namebase(filename):
     #print(parts.group(0),parts.group(1),parts.group(2),base)
     return base
     
-def process_ser_file(filename):
+def process_ser_file(filename,args):
 
       base =get_namebase(filename) #cut off the _1.ser _2.ser from filename
 
@@ -369,10 +372,10 @@ def process_ser_file(filename):
       try:
           f.seek(0)
           raw = f.read(file_size)
-          if raw:
+          if raw and file_size > 2048:
               
-              header_inf=read_TIA_SER_header(raw[:2048],file_size)
-              data_header=read5_data(raw[:2048],header_inf['DataOffset'])
+              header_inf=read_TIA_SER_header(raw,file_size)
+              data_header=read5_data(raw,header_inf['DataOffset'])
               ysize,xsize=(data_header['ArraySizeY'],data_header['ArraySizeX'])
               
               datatype,point_bytes,datafmt,numpy_dtype=get_datatype(data_header['DataType'])
@@ -390,10 +393,12 @@ def process_ser_file(filename):
               negativelist,=np.where(data<0)
               
               if( len(negativelist) > 0):
-                print("negative values found at:",negativelist,data[negativelist],"converted to 0")
-                data[negativelist]=0
+                print("negative values found at:",negativelist,data[negativelist])
+                if(max<65536/2 and len (nagativelist)<10):
+                  print("converted to 0")
+                  data[negativelist]=0
               
-              neg_data=data*(-1) #invert
+              
               
               amax=data.max()
               amin=data.min()
@@ -423,22 +428,14 @@ def process_ser_file(filename):
                 apix,magnification,defocus,kV=print_xml_data(xml_dict)
               apix_from_header=float(data_header['CalibrationDeltaX']*10000000000)
               pixel_size=apix_from_header*magnification/10000 #um
-              desc_data=xmltext
-              collect_time=re.sub(
-                r' ',
-                r'_',
-                collect_time
-              )
+
+              collect_time=re.sub(r' ',r'_',collect_time)
+              collect_time_compact=line = re.sub(r"[ :-]", "",collect_time       )
+              print (">>>>>>",filename,collect_time,collect_time_compact)
               
-              collect_time_compact=line = re.sub(
-                      r"[ :-]", 
-                      "",            
-                      collect_time       )
-              print (">>>>>>",collect_time,collect_time_compact)
               infstr='_{:4.3f}Ap_{:d}KX_{}um_{:d}kV_mean{:d}_{}'.format(apix_from_header,int(magnification/1000),defocus,kV,int(amean),collect_time_compact)
-              tif_name=filename+infstr+'.tif'
-              tif8_name=filename+infstr+'.uint8.tif'
-              mrc_name=filename+infstr+'.mrc'
+              from mrc import save_tif_mrc
+              save_tif_mrc(data,args,base_ns,infstr,xmltext,amax,amin,amean,arms,ysize,xsize,apix_from_header)
 
 
 
@@ -447,43 +444,28 @@ def process_ser_file(filename):
 #              for i in range(amax-amin):
 #                  print ("{} {} {}".format(i,hs[0][i],hs[1][i]))
               
-              save_tiff=True
-              save_mrc =True
-              if(save_tiff == True):
-                import EM_tiff
-                EM_tiff.save_tiff8(neg_data,desc_data,tif8_name,-amin,-amax,ysize,xsize)     
-                EM_tiff.save_tiff16_no_rescaling(data,desc_data,tif_name,amax,amin,ysize,xsize)     
-              if(save_mrc == True):
-                import mrc
-                d1=data.reshape(xsize,ysize,1)
-                to_type=''
-                if(amax<65536/2 and amin>=0):
-                  to_type=np.int16
-                else:
-                  to_type=np.float32
-                data_16int=d1.astype(to_type)
-                mrc.save_mrc(mrc_name,data_16int, desc=xmltext,hdr_apix=apix_from_header)
-              #df = data.astype(np.float32) 
-              #d0=df*127/amax
-              #d1=d0.reshape(ysize,xsize,1)
-              #d2=d1.astype(np.int8)
+              
+                
+
 
       finally:
         
           f.close()
 
-
 ############################main##################
 def main():
-    if len(sys.argv)>1 and sys.argv[1]:
-      files=sys.argv[1:]
-      
-    else: 
-      print ("Please provide .ser file as arguments")
-      sys.exit(0)
+    parser = argparse.ArgumentParser(description='Dump Tecnai Image Aquisition(TIA) .ser files to TIFF and MRC files.\n If .emi files are found, extract XML and save in both XML and YAML format.')
+    parser.add_argument("-tif",action='store_true',default=False, help="Output .tif file containing the original data.")
+    parser.add_argument("-mrc",action='store_true',default=False, help="Output .mrc file containing the original data. If the max value is less than 65536/2, save in int16. Otherwise float32.")
+    parser.add_argument("-invmrc",action='store_true',default=False, help="invert contrast in the resulting MRC file (so that it is easier to directly go to CryoSPARC2). Same as the --multi=-1 option in exproc2d.py. TIFF files are not affected.")
+    parser.add_argument("-invtif8",action='store_true',default=False, help="invert contrast in the resulting 8bit TIFF file. ")
+    parser.add_argument("ser_files",metavar='.ser files',nargs='+',type=str, help="The .ser files to process.")
+    args=parser.parse_args()
     
-    for filename in files:
-      process_ser_file(filename)
+    
+    for filename in args.ser_files:
+      process_ser_file(filename,args)
 
 #####################3
-main()
+if __name__ == '__main__':
+  main()
