@@ -13,7 +13,9 @@ If EMI file is found, the xml section will be extracted and saved as .xml file. 
 
 # .EMI format:
 
-TIA .EMI file format is not disclosed by FEI. However it contains a exact same copy of the data block as that found in the .ser file. 
+TIA .EMI file format is not disclosed by FEI. However when there is only one image frame, it contains a copy of the data block as that found in the .SER file.  
+
+Note: When there are multiple frames, such as when the data is collected in continueous mode with multiple frames, the EMI file only stores one frame, whereas the .SER file stores all the frames.
 
 In front of the datablock, 1 byte carries the datatype '06', 12 bytes code 3 x int4 numbers:
 ```
